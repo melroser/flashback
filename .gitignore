@@ -1,0 +1,53 @@
+# dependencies
+node_modules
+
+# next.js
+.next
+out
+build
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# secrets — NEVER commit
+.env
+.env*.local
+.env.ingest.local
+*.pem
+
+# netlify
+.netlify
+
+# ingest working dirs: hardlinked photos + encoded video.
+# Media lives in Netlify Blobs, never in the repo, and originals stay on the
+# photographer's machine.
+ingest-staging/
+lightroom-download-*/
+scripts/tmp/
+
+# never let media into the repo, wherever it lands
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.heif
+*.tif
+*.tiff
+*.mp4
+*.mov
+*.m4v
+*.mts
+*.m2ts
+*.cr2
+*.cr3
+*.nef
+*.arw
+*.dng
+*.raf
+*.orf
+*.rw2
+
+# os / editor
+.DS_Store
+*.log
+npm-debug.log*
+coverage

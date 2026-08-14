@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Duplicated from next.config.ts on purpose. This covers static assets served
+# straight off the CDN that never reach the Next handler. A duplicated header is
+# harmless; a missing one on a static path is not.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    X-Robots-Tag = "noindex, nofollow"
+    X-Frame-Options = "DENY"

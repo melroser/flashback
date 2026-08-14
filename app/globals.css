@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   FLASHBACK
+   A private archive of one night. It should feel like something somebody at
+   the rave built afterward at 4am, not like a client proofing gallery.
+   Every effect below is a pointer-events:none overlay or a static filter.
+   None of them intercept input. None are required in order to read anything.
+   ========================================================================== */
+
+:root {
+  --void: #080809;
+  --tar: #111114;
+  --ash: #1c1c21;
+  --flash: #f5f3ee;
+  --bone: #e8e5de;
+  --smoke: #a8a29a;
+  --uv: #7a3cff;
+  --acid: #39ff6a;
+  --siren: #ff2d2d;
+  --ice: #2de1ff;
+}
+
+@layer base {
+  html {
+    background: var(--void);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--void);
+    color: var(--bone);
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    letter-spacing: -0.005em;
+    overflow-x: hidden;
+  }
+
+  /* Focus is always visible. `outline: none` appears nowhere in this codebase. */
+  :focus-visible {
+    outline: 2px solid var(--acid);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--uv);
+    color: var(--flash);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Grain. The base texture, always on. An inline feTurbulence data URI so it
+   costs zero extra requests and stays inside `img-src 'self' data:`.
+   Animated by stepping background-position through 8 discrete positions, so it
+   flickers like film rather than sliding.
+   -------------------------------------------------------------------------- */
+.fx-grain::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  animation: grain 800ms steps(8) infinite;
+}
+
+@keyframes grain {
+  0% { transform: translate(0, 0); }
+  12.5% { transform: translate(-3%, -2%); }
+  25% { transform: translate(2%, -4%); }
+  37.5% { transform: translate(-1%, 3%); }
+  50% { transform: translate(3%, 1%); }
+  62.5% { transform: translate(-4%, 2%); }
+  75% { transform: translate(1%, -3%); }
+  87.5% { transform: translate(-2%, -1%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Vignette. Pulls the eye to the photographs. */
+.fx-vignette::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.7) 100%);
+}
+
+/* Light leak. Two blurred blobs drifting slowly. This is what stops the page
+   reading as flat black. */
+.fx-leak::before,
+.fx-leak::after {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(90px);
+  will-change: transform;
+}
+
+.fx-leak::before {
+  top: -18vh;
+  left: -12vw;
+  width: 62vw;
+  height: 62vh;
+  background: radial-gradient(circle, rgba(122, 60, 255, 0.1), transparent 70%);
+  animation: drift-a 60s ease-in-out infinite;
+}
+
+.fx-leak::after {
+  bottom: -20vh;
+  right: -14vw;
+  width: 56vw;
+  height: 56vh;
+  background: radial-gradient(circle, rgba(255, 45, 45, 0.07), transparent 70%);
+  animation: drift-b 74s ease-in-out infinite;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(6vw, 4vh, 0); }
+}
+
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-5vw, -6vh, 0); }
+}
+
+/* CRT scanlines. Used on the featured video frame and the ended state. */
+.fx-scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.22) 2px 3px
+  );
+  animation: scan-drift 6s linear infinite;
+}
+
+@keyframes scan-drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(3px); }
+}
+
+/* Chromatic fringe. Static, so it is not motion and stays on under
+   prefers-reduced-motion. Reads as a mistracked video capture. */
+.fx-fringe {
+  text-shadow:
+    -1px 0 0 rgba(45, 225, 255, 0.55),
+    1px 0 0 rgba(255, 45, 45, 0.45);
+}
+
+/* Taped label. Small and physical, like tape on a contact sheet. */
+.tape {
+  display: inline-block;
+  border: 1px solid var(--ash);
+  background: var(--tar);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+  transform: rotate(-0.4deg);
+}
+
+.tape:nth-child(even) {
+  transform: rotate(0.4deg);
+}
+
+/* --------------------------------------------------------------------------
+   Overexposure flash.
+
+   THIS IS A PHOTOSENSITIVITY CONSTRAINT, NOT A STYLE DETAIL.
+   WCAG 2.3.1 sets a three-flash threshold. This is hard capped at ONE flash of
+   120ms, never repeated, never looped, never fired on the auth failure path (a
+   wrong code must not produce a reward stimulus), and removed entirely under
+   prefers-reduced-motion. Nothing else in this application flashes or strobes.
+   -------------------------------------------------------------------------- */
+.fx-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: var(--flash);
+  animation: one-flash 120ms steps(2) 1 forwards;
+}
+
+@keyframes one-flash {
+  0% { opacity: 0.92; }
+  100% { opacity: 0; }
+}
+
+/* Media deterrents. These are deterrents only; a website cannot prevent
+   screenshots and nothing here claims otherwise. */
+.no-save {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion. One block. Every control, the video and the removal flow
+   behave identically; only the decoration stops.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .fx-grain::after {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .fx-scan::after,
+  .fx-leak::before,
+  .fx-leak::after {
+    animation: none !important;
+  }
+
+  .fx-flash {
+    display: none !important;
+  }
+}
