@@ -202,6 +202,8 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  pointer-events: auto;
 }
 
 /* --------------------------------------------------------------------------

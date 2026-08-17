@@ -25,6 +25,8 @@ export const sessionKey = () => requireEnv('FLASHBACK_SESSION_KEY');
 export const organizerSecret = () => requireEnv('FLASHBACK_ORGANIZER_SECRET');
 
 export const archiveId = () => optionalEnv('FLASHBACK_ARCHIVE_ID') ?? 'qlick-qrave';
+/** Shown to organizers so they know who sent the link. */
+export const photographer = () => optionalEnv('FLASHBACK_PHOTOGRAPHER') ?? 'The photographer';
 export const eventName = () => optionalEnv('FLASHBACK_EVENT_NAME') ?? 'QLICK QRAVE';
 export const attendeeCodeSeed = () => optionalEnv('FLASHBACK_ATTENDEE_CODE_SEED');
 export const expiresAtSeed = () => optionalEnv('FLASHBACK_EXPIRES_AT');
@@ -37,3 +39,21 @@ export const siteOrigin = () =>
 export const DEFAULT_EXPIRY_DAYS = 12;
 export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 export const PBKDF2_ITERATIONS = 600_000; // current OWASP guidance for PBKDF2-HMAC-SHA256
+
+/**
+ * Explicit Blobs credentials.
+ *
+ * Inside the Netlify runtime these are injected automatically and this returns
+ * nothing. Locally, `netlify dev` uses a SANDBOXED store that cannot see
+ * production data, so supplying NETLIFY_SITE_ID and NETLIFY_API_TOKEN is what lets
+ * a local server read the real archive.
+ *
+ * Pair that with a distinct FLASHBACK_ARCHIVE_ID locally to keep local writes in
+ * their own key namespace, so local testing cannot hide or delete anything an
+ * attendee can see.
+ */
+export function blobCreds(): { siteID?: string; token?: string } {
+  const siteID = optionalEnv('NETLIFY_SITE_ID');
+  const token = optionalEnv('NETLIFY_API_TOKEN');
+  return siteID && token ? { siteID, token } : {};
+}

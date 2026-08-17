@@ -59,7 +59,12 @@ Always `--dry-run` first. It reports sizes, skips RAW by extension, and verifies
 every derivative carries no EXIF, GPS, IPTC, XMP, MakerNotes, or embedded face
 regions, without writing anything.
 
-`verify` runs ~30 assertions against the deployed site, including a timed check that
+**If you interrupt `npm run verify` mid-run**, it may leave one photograph hidden
+and a test removal request pending, because its cleanup step never executed. Fix in
+`/admin`: **Restore everything hidden**, then **Dismiss all**. Harmless, but the
+archive should be clean before an organizer sees it.
+
+`verify` runs ~46 assertions against the deployed site, including a timed check that
 Disable takes hold within 5 seconds. **A green local build is not evidence** —
 Netlify Dev uses a sandboxed blob store that cannot see production data.
 
@@ -78,6 +83,7 @@ Set on the Netlify site (`netlify env:set`):
 | `FLASHBACK_EXPIRES_AT` | no | ISO seed; otherwise 12 days from creation |
 | `FLASHBACK_SITE_ORIGIN` | no | Origin check target; falls back to Netlify's `URL` |
 | `FLASHBACK_ATTENDEE_CODE_SEED` | no | Recovery only. Normally unset, because ingest seeds the code |
+| `FLASHBACK_PHOTOGRAPHER` | no | First name shown on the organizer sign-in screen |
 
 Ingest-only, in `.env.ingest.local` (gitignored):
 `NETLIFY_SITE_ID`, `NETLIFY_API_TOKEN`.
@@ -163,6 +169,29 @@ Attendee accounts. An upload UI. Scheduled auto-purge. The subject-consent QR sy
 seams). Native apps. Analytics. Public media URLs. Multi-event support — though every
 blob key is namespaced by `FLASHBACK_ARCHIVE_ID`, so a second event is a new
 deployment variable rather than a migration.
+
+---
+
+## Handing the link to an organizer
+
+The realistic first contact is a link pasted into an Instagram DM, opened on a phone,
+by someone who knows nothing about any of this. Three things are built for that
+moment:
+
+1. **The link preview.** `public/og.jpg` is a 1200x630 card — wordmark, event name,
+   "Locked, and built to disappear." Regenerate with
+   `npx tsx scripts/og/make-og.ts`. It is typography and light only: link crawlers
+   are unauthenticated, so anything referenced there is effectively public, and a
+   real frame must never appear in it.
+2. **`/admin` returns 200 to a request with no session**, not 401, so crawlers
+   render that card. The page is only a login form and discloses nothing. The
+   security boundary is `/api/admin/*`, which still returns 401 and 403, and the
+   page re-verifies before rendering anything. A request carrying an *attendee*
+   session still gets 403 — that is a real "signed in, still not allowed".
+3. **The sign-in screen explains itself before asking for anything**: what this is,
+   why it is not a Drive link, that they hand out access rather than the
+   photographer, that one tap kills it, that anyone depicted can pull a photo
+   without giving a name, and that it expires on its own.
 
 ---
 

@@ -3,9 +3,8 @@ import { headers } from 'next/headers';
 import { Countdown } from '@/components/Countdown';
 import { Footer } from '@/components/Footer';
 import { FeaturedVideo } from '@/components/FeaturedVideo';
-import { PhotoGrid, type GridItem } from '@/components/PhotoGrid';
+import { PhotoGridClient } from '@/components/PhotoGridClient';
 import { gateGrid } from '@/lib/auth/gate';
-import { readGridDataUris } from '@/lib/media/serve';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -28,8 +27,7 @@ function Ended() {
 }
 
 export default async function ArchiveView() {
-  // Reconstruct the incoming Request for the gate. Every authorization decision
-  // happens server-side, on every render.
+  // Every authorization decision happens server-side, on every render.
   const h = await headers();
   const req = new Request('https://flashback.local/archive', {
     headers: new Headers({ cookie: h.get('cookie') ?? '' }),
@@ -38,33 +36,18 @@ export default async function ArchiveView() {
   const gate = await gateGrid(req);
 
   if (!gate.ok) {
-    // Expired: render the ended state with zero media references in the markup.
+    // Expired or disabled: render the ended state with zero media references.
     if (gate.code === 'ARCHIVE_EXPIRED' || gate.code === 'ARCHIVE_DISABLED') return <Ended />;
     redirect('/');
   }
 
   const { config, photos, featured, featuredEntry, role } = gate;
 
-  // Grid thumbnails are inlined as base64 into this already-gated, already
-  // uncacheable response. That turns ~41 function invocations per grid view into
-  // one, which matters because Netlify Free is credit-metered and running out
-  // pauses the whole site. The cost is no lazy loading and a larger HTML payload.
-  const dataUris = await readGridDataUris(photos);
-
-  const items: GridItem[] = photos.flatMap((p) => {
-    const uri = dataUris.get(p.mediaId);
-    const meta = p.entry.variants.grid;
-    if (!uri || !meta) return [];
-    return [
-      {
-        mediaId: p.mediaId,
-        label: p.entry.label,
-        dataUri: uri,
-        width: meta.width,
-        height: meta.height,
-      },
-    ];
-  });
+  // Thumbnails are NOT read or embedded here. They arrive from GET /api/grid in a
+  // single request, because anything rendered by a Server Component also ships
+  // inside the RSC hydration payload — which meant every thumbnail was sent twice
+  // and made this page 1.44MB for 0.7MB of images.
+  const photoCount = photos.length;
 
   const createdMs = Date.parse(config.createdAt);
   const expiresMs = Date.parse(config.expiresAt);
@@ -74,9 +57,7 @@ export default async function ArchiveView() {
     <main className="relative flex min-h-dvh flex-col">
       {/* Sticky hairline bar */}
       <div className="sticky top-0 z-[60] flex h-8 items-center justify-between border-b border-ash bg-void/90 px-3 backdrop-blur">
-        <span className="font-display text-sm uppercase tracking-tight text-flash">
-          Flashback
-        </span>
+        <span className="font-display text-sm uppercase tracking-tight text-flash">Flashback</span>
         <Countdown expiresAt={config.expiresAt} compact />
       </div>
 
@@ -97,8 +78,7 @@ export default async function ArchiveView() {
         </div>
       </div>
 
-      {/* Featured video. No autoplay. Muted by default so nobody gets surprised
-          by sound, but the volume control still works. */}
+      {/* Featured video. No autoplay, muted by default, volume control intact. */}
       {featured && featuredEntry ? (
         <section className="fx-scan relative mt-8 border-y border-ash bg-black">
           <FeaturedVideo
@@ -113,7 +93,7 @@ export default async function ArchiveView() {
         </section>
       ) : null}
 
-      {/* Privacy notice. Persistent, not dismissible. Human, not lawyer ToS. */}
+      {/* Persistent, not dismissible. Human, not lawyer ToS. */}
       <aside className="mx-3 mt-8 border-l-2 border-uv bg-tar px-4 py-4">
         <p className="text-body text-bone">
           This is a private, temporary archive. Please don&apos;t identify, tag, download,
@@ -128,7 +108,7 @@ export default async function ArchiveView() {
       </aside>
 
       <section className="mt-8 flex-1">
-        <PhotoGrid items={items} />
+        <PhotoGridClient count={photoCount} />
       </section>
 
       <Footer />

@@ -24,7 +24,10 @@ ingest-staging/
 lightroom-download-*/
 scripts/tmp/
 
-# never let media into the repo, wherever it lands
+# never let media into the repo, wherever it lands.
+# ONE exception, below: public/og.jpg is the link-preview card. Typography and
+# light only, no archive frame, and it must ship because link crawlers are
+# unauthenticated.
 *.jpg
 *.jpeg
 *.png
@@ -45,6 +48,8 @@ scripts/tmp/
 *.raf
 *.orf
 *.rw2
+
+!public/og.jpg
 
 # os / editor
 .DS_Store

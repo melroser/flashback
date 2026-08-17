@@ -1,5 +1,5 @@
 import { getStore, type Store } from '@netlify/blobs';
-import { archiveId } from '../config/env';
+import { archiveId, blobCreds } from '../config/env';
 import { configKey, indexKey, visKey } from './keys';
 import type { ArchiveConfig, MediaIndex, Visibility } from './types';
 
@@ -16,7 +16,7 @@ import type { ArchiveConfig, MediaIndex, Visibility } from './types';
 let _meta: Store | null = null;
 export function metaStore(): Store {
   if (_meta) return _meta;
-  _meta = getStore({ name: 'flashback-meta', consistency: 'strong' });
+  _meta = getStore({ name: 'flashback-meta', consistency: 'strong', ...blobCreds() });
   return _meta;
 }
 
