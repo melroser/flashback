@@ -12,7 +12,8 @@
     "ingest": "tsx scripts/ingest/index.ts",
     "verify": "tsx scripts/verify-deployed.ts",
     "snapshot-ids": "tsx scripts/snapshot-ids.ts",
-    "sweep-orphans": "tsx scripts/sweep-orphans.ts"
+    "sweep-orphans": "tsx scripts/sweep-orphans.ts",
+    "reset-archive": "tsx scripts/reset-archive.ts"
   },
   "dependencies": {
     "@netlify/blobs": "8.2.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "5.13.4",
+    "@playwright/test": "^1.56.1",
     "@types/node": "22.18.0",
     "@types/react": "19.1.9",
     "@types/react-dom": "19.1.7",

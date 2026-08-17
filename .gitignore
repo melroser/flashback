@@ -56,3 +56,8 @@ scripts/tmp/
 *.log
 npm-debug.log*
 coverage
+
+# Test output and ingest scratch. Both are regenerated; neither belongs in history.
+test-results/
+playwright-report/
+scripts/.orphan-ids.json

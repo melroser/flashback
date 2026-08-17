@@ -25,6 +25,17 @@ Send four things, out of band. None of them belong in this repo.
 | Organizer URL | `https://flashback-qlick.netlify.app/admin` |
 | Organizer secret | value of `FLASHBACK_ORGANIZER_SECRET` |
 
+### Two codes, and they are not interchangeable
+
+| | Length | Who gets it | What it does |
+|---|---|---|---|
+| **Access code** | short, e.g. `ZGZEDDG66B` | people who were there | view only |
+| **Organizer key** | long | organizers only | hide, delete, change the countdown, shut it all off |
+
+Never send the organizer key to guests — anyone holding it can delete the gallery.
+Rotating the access code in `/admin` signs out everyone using the old one, which is
+how you cut off access if a code gets passed around.
+
 The organizer sends the attendee URL and code to attendees herself. The photographer
 never receives an attendee list, and the app has no mechanism to import or store one.
 
@@ -44,11 +55,63 @@ requests.
 
 ```bash
 npm run ingest -- <dir> [--dry-run] [--featured <file>] [--mute <file>] [--audio <file>=<track.m4a>]
-npm run verify -- --url <url> --code <code> --secret <secret>
+npm run verify -- --url <url> --code <code> --secret <secret>   # ~46 API checks, deployed
+npm run e2e                                                     # real browsers, deployed
+npm run snapshot-ids                                            # before a re-ingest
+npm run sweep-orphans                                           # after a re-ingest
+npm run reset-archive                                           # dry run
+npm run reset-archive -- --yes-delete-everything                 # actually wipe
 npm run build
 npm test
 ./scripts/check-invariants.sh
 ```
+
+### Starting a fresh event
+
+**Preferred: a new namespace.** Every blob key is scoped by `FLASHBACK_ARCHIVE_ID`,
+so a new event needs no deletion at all. The old archive stays intact and a new
+access code is minted automatically.
+
+```bash
+netlify env:set FLASHBACK_ARCHIVE_ID 'qlick-nov'
+netlify env:set FLASHBACK_EVENT_NAME 'QLICK NOVEMBER'
+netlify env:unset FLASHBACK_EXPIRES_AT
+netlify deploy --build --prod
+npm run ingest -- /path/to/folder --dry-run
+npm run ingest -- /path/to/folder --featured YOURCLIP.mov
+```
+
+**Or wipe and reuse the same namespace.** Note the admin "Delete everything" button
+is *not* this: it removes media bytes but leaves the index, config, access code and
+removal history in place. `reset-archive` removes the whole namespace.
+
+```bash
+npm run reset-archive                              # lists what it would delete
+npm run reset-archive -- --yes-delete-everything   # applies, then verifies
+npm run ingest -- /path/to/folder --featured YOURCLIP.mov
+```
+
+**Cycling the keys** (they live in env vars, so no reset touches them):
+
+```bash
+netlify env:set FLASHBACK_SESSION_KEY "$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+netlify env:set FLASHBACK_ORGANIZER_SECRET "$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")"
+netlify env:list      # read the new organizer key from here; nothing else stores it
+netlify deploy --build --prod
+```
+
+Rotating `FLASHBACK_SESSION_KEY` signs out every existing session.
+
+Three things that will bite you:
+
+- **The video must sit in the same folder as the photos.** One ingest run writes one
+  index, so a second run would replace the first rather than add to it.
+- **Ingest preserves, reset does not.** Running ingest over an existing archive keeps
+  the old access code, expiry and LIVE/DISABLED state on purpose, so a re-edit cannot
+  silently revoke access you already handed out. Only `reset-archive` mints a new code.
+- **Expiry counts from the reset, not the event.** Unset, it defaults to 12 days from
+  when the config is recreated. Pin it if you care:
+  `netlify env:set FLASHBACK_EXPIRES_AT '2026-09-05T06:00:00Z'`
 
 ### Re-ingesting a new edit
 
@@ -77,12 +140,32 @@ Always `--dry-run` first. It reports sizes, skips RAW by extension, and verifies
 every derivative carries no EXIF, GPS, IPTC, XMP, MakerNotes, or embedded face
 regions, without writing anything.
 
-**If you interrupt `npm run verify` mid-run**, it may leave one photograph hidden
+### Browser tests
+
+`npm run verify` checks the API contract with plain `fetch`. It does not click
+anything, and that gap was real: the Origin check rejected requests that omit the
+header, which browsers do on same-origin form submissions, so every button on
+`/admin` returned `{"error":"FORBIDDEN"}` in Safari while the whole curl suite passed.
+
+```bash
+npx playwright install webkit chromium        # once
+FB_CODE=<code> FB_SECRET=<key> npm run e2e
+```
+
+Runs on WebKit, Chromium and mobile Safari against the deployed site. WebKit is the
+one that matters — it is Safari's engine, where that bug lived. The tests click real
+buttons, submit real forms, and assert `naturalWidth > 0` so a passing image test
+means bytes actually decoded rather than a tag merely existing.
+
+These tests mutate the live archive (hide, restore, disable, enable) and clean up
+after themselves. An interrupted run can leave one photo hidden — see below.
+
+**If you interrupt `npm run verify` or `npm run e2e` mid-run**, it may leave one photograph hidden
 and a test removal request pending, because its cleanup step never executed. Fix in
 `/admin`: **Restore everything hidden**, then **Dismiss all**. Harmless, but the
 archive should be clean before an organizer sees it.
 
-`verify` runs ~46 assertions against the deployed site, including a timed check that
+`verify` runs ~46 API assertions against the deployed site, including a timed check that
 Disable takes hold within 5 seconds. **A green local build is not evidence** —
 Netlify Dev uses a sandboxed blob store that cannot see production data.
 

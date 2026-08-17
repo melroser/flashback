@@ -1,14 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StrippedExif } from './StrippedExif';
 
 interface GridItem {
   mediaId: string;
   label: string;
+  /** Absent on manifests served before clips were indexed; treated as a photo. */
+  type?: 'photo' | 'video';
   width: number;
   height: number;
+  durationMs?: number;
   dataUri: string;
+}
+
+const isClip = (i: GridItem) => i.type === 'video';
+
+function runtime(ms: number | undefined): string {
+  if (!ms) return '';
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 const block = (e: React.SyntheticEvent) => e.preventDefault();
@@ -27,6 +37,48 @@ export function PhotoGridClient({ count }: { count: number }) {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [lightbox, setLightbox] = useState<GridItem | null>(null);
   const [asking, setAsking] = useState<GridItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const recovering = useRef(false);
+
+  /**
+   * Recovers a tab that is holding a manifest from before an ingest.
+   *
+   * Re-ingest mints a fresh mediaId for every item and the orphan sweep deletes the
+   * old bytes, so every id in an older manifest 404s. The failure is invisible in
+   * the grid, because thumbnails are inline data URIs that need no network — the
+   * contact sheet looks perfectly healthy while every lightbox is broken.
+   *
+   * On a full-size load failure we refetch the manifest. If the id is genuinely
+   * gone, the grid is replaced wholesale and the lightbox closes.
+   *
+   * We deliberately do NOT re-map the dead item onto a new id by matching labels.
+   * Labels are positional, so any reorder would quietly surface a different
+   * person's photograph under the label the viewer clicked. That is the one failure
+   * this archive must never produce, and a reload notice is the cheap price of
+   * never producing it.
+   */
+  const recoverFromStaleManifest = useCallback(async (staleId: string) => {
+    if (recovering.current) return;
+    recovering.current = true;
+    try {
+      const r = await fetch('/api/grid', { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = (await r.json()) as { items: GridItem[] };
+      const stillListed = d.items.some((i) => i.mediaId === staleId);
+      setItems(d.items);
+      if (!stillListed) {
+        setLightbox(null);
+        setNotice(
+          'This archive was updated while your tab was open. The photographs have been reloaded.',
+        );
+      }
+    } catch {
+      // Leave the broken frame in place. The alt text already names the item, and
+      // guessing is worse than saying nothing.
+    } finally {
+      recovering.current = false;
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -70,20 +122,40 @@ export function PhotoGridClient({ count }: { count: number }) {
 
   return (
     <>
+      {notice ? (
+        <p
+          role="status"
+          className="mb-3 border-l-2 border-uv bg-tar px-3 py-2 text-body text-bone"
+        >
+          {notice}
+        </p>
+      ) : null}
+
       <ul className="grid grid-cols-1 gap-[2px] sm:grid-cols-2 lg:grid-cols-3 lg:gap-[3px] 2xl:grid-cols-4">
         {visible.map((item, idx) => (
           <li key={item.mediaId} className="relative bg-tar">
             <button
               type="button"
-              onClick={() => setLightbox(item)}
+              onClick={() => {
+                setNotice(null);
+                setLightbox(item);
+              }}
               aria-label={`Open ${item.label} larger`}
-              className="block w-full"
+              className="relative block w-full"
             >
               {/* Plain <img>. next/image would route through the Netlify Image CDN,
-                  caching transformed protected bytes outside the gate. */}
+                  caching transformed protected bytes outside the gate.
+
+                  A clip shows its poster frame here, which is inlined in the same
+                  manifest. No video bytes are touched until the tile is opened, so
+                  a grid load costs the same whether or not clips are present. */}
               <img
                 src={item.dataUri}
-                alt={`Photograph ${item.label} from the night`}
+                alt={
+                  isClip(item)
+                    ? `Clip ${item.label} from the night`
+                    : `Photograph ${item.label} from the night`
+                }
                 width={item.width}
                 height={item.height}
                 draggable={false}
@@ -93,6 +165,18 @@ export function PhotoGridClient({ count }: { count: number }) {
                 className="no-save block h-auto w-full border border-transparent hover:border-acid"
                 style={{ aspectRatio: `${item.width} / ${item.height}` }}
               />
+
+              {isClip(item) ? (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1.5 border border-acid/70 bg-void/80 px-1.5 py-0.5 text-label uppercase tracking-[0.28em] text-acid"
+                >
+                  <svg width="8" height="9" viewBox="0 0 8 9" fill="currentColor">
+                    <path d="M0 0l8 4.5L0 9z" />
+                  </svg>
+                  {runtime(item.durationMs)}
+                </span>
+              ) : null}
             </button>
 
             <div className="flex items-center justify-between gap-2 px-2 py-1.5">
@@ -118,7 +202,13 @@ export function PhotoGridClient({ count }: { count: number }) {
         <p className="px-4 py-16 text-center text-body text-smoke">Nothing here right now.</p>
       ) : null}
 
-      {lightbox ? <Lightbox item={lightbox} onClose={() => setLightbox(null)} /> : null}
+      {lightbox ? (
+        <Lightbox
+          item={lightbox}
+          onClose={() => setLightbox(null)}
+          onStale={recoverFromStaleManifest}
+        />
+      ) : null}
 
       {asking ? (
         <RemovalDialog
@@ -164,7 +254,15 @@ function useDismiss(onClose: () => void) {
   return ref;
 }
 
-function Lightbox({ item, onClose }: { item: GridItem; onClose: () => void }) {
+function Lightbox({
+  item,
+  onClose,
+  onStale,
+}: {
+  item: GridItem;
+  onClose: () => void;
+  onStale: (mediaId: string) => void;
+}) {
   const ref = useDismiss(onClose);
   return (
     <div
@@ -187,27 +285,39 @@ function Lightbox({ item, onClose }: { item: GridItem; onClose: () => void }) {
       </div>
 
       <div className="flex flex-1 items-center justify-center overflow-hidden">
-        {/* Full derivative fetched on demand through the authenticated route. */}
-        <img
-          src={`/api/media/${item.mediaId}?v=full`}
-          alt={`Photograph ${item.label} from the night`}
-          draggable={false}
-          onDragStart={block}
-          onContextMenu={block}
-          className="no-save max-h-full max-w-full object-contain"
-        />
-      </div>
-
-      {/* Where a film site would show off the EXIF. Ours shows its absence. */}
-      <div className="mx-auto w-full max-w-md shrink-0 pb-1 pt-2">
-        <details>
-          <summary className="cursor-pointer list-none text-label uppercase tracking-[0.28em] text-smoke hover:text-bone">
-            Camera data — removed
-          </summary>
-          <div className="mt-2">
-            <StrippedExif mediaId={item.mediaId} />
-          </div>
-        </details>
+        {isClip(item) ? (
+          /* No autoplay, muted by default, controls intact — the same posture as
+             the featured video. `preload="metadata"` means opening a clip costs a
+             few KB; the megabytes only move if the viewer presses play. */
+          <video
+            src={`/api/media/${item.mediaId}`}
+            poster={`/api/media/${item.mediaId}?v=poster`}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            controlsList="nodownload noplaybackrate"
+            disablePictureInPicture
+            onContextMenu={block}
+            onError={() => onStale(item.mediaId)}
+            aria-label={`Clip ${item.label} from the night`}
+            className="no-save max-h-full max-w-full"
+          />
+        ) : (
+          /* Full derivative fetched on demand through the authenticated route. */
+          <img
+            src={`/api/media/${item.mediaId}?v=full`}
+            alt={`Photograph ${item.label} from the night`}
+            draggable={false}
+            onDragStart={block}
+            onContextMenu={block}
+            // A failure here is almost always a manifest from before an ingest, so
+            // the id no longer resolves. Ask the parent to refetch rather than
+            // leaving the viewer with the browser's broken-image glyph.
+            onError={() => onStale(item.mediaId)}
+            className="no-save max-h-full max-w-full object-contain"
+          />
+        )}
       </div>
     </div>
   );

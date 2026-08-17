@@ -134,8 +134,11 @@ export async function gateMedia(
 
     const vis: Visibility | null = await readVisibility(mediaId);
     if (vis?.deleted) return deny(404, 'MEDIA_DELETED');
-    // The Organizer must be able to preview hidden items in order to review them.
-    if (vis?.hidden && view.role !== 'organizer') return deny(404, 'MEDIA_HIDDEN');
+    // Hidden means hidden, for everyone including organizers. Once someone asks for
+    // a photo to come down it stops being served, full stop — no role gets to keep
+    // pulling those bytes. The admin screen shows a labelled placeholder instead of
+    // a preview.
+    if (vis?.hidden) return deny(404, 'MEDIA_HIDDEN');
 
     const proof = {
       role: view.role,
@@ -184,6 +187,7 @@ export async function gateGrid(req: Request): Promise<
       role: Role;
       config: ArchiveConfig;
       photos: GateProof[];
+      videos: GateProof[];
       featured: GateProof | null;
       featuredEntry: MediaEntry | null;
     }
@@ -193,25 +197,43 @@ export async function gateGrid(req: Request): Promise<
     const view = await gateView(req);
     if (!view.ok) return view;
 
+    const role: Role = view.role;
+
     const index = await readIndex();
     if (!index) {
-      return { ok: true, role: view.role, config: view.config, photos: [], featured: null, featuredEntry: null };
+      return {
+        ok: true,
+        role,
+        config: view.config,
+        photos: [],
+        videos: [],
+        featured: null,
+        featuredEntry: null,
+      };
     }
 
     const visible: MediaEntry[] = [];
     for (const entry of [...index.entries].sort((a, b) => a.order - b.order)) {
       const vis = await readVisibility(entry.mediaId);
       if (vis?.deleted) continue;
-      if (vis?.hidden && view.role !== 'organizer') continue;
+      if (vis?.hidden) continue; // never surfaced to any role
       visible.push(entry);
     }
 
     const mk = (entry: MediaEntry, variant: Variant): GateProof =>
-      ({ role: view.role, mediaId: entry.mediaId, variant, entry } as unknown as GateProof);
+      ({ role, mediaId: entry.mediaId, variant, entry } as unknown as GateProof);
 
     const photos = visible
       .filter((e) => e.type === 'photo' && e.variants.grid)
       .map((e) => mk(e, 'grid'));
+
+    // Clips carry a poster frame, which is a couple of KB, so they ride the same
+    // inlined manifest as the thumbnails rather than costing a request each. The
+    // proof is cut for `poster`; the bytes for playback are fetched separately and
+    // re-gated when the viewer actually presses play.
+    const videos = visible
+      .filter((e) => e.type === 'video' && e.variants.poster)
+      .map((e) => mk(e, 'poster'));
 
     const featuredEntry =
       visible.find(
@@ -220,9 +242,10 @@ export async function gateGrid(req: Request): Promise<
 
     return {
       ok: true,
-      role: view.role,
+      role,
       config: view.config,
       photos,
+      videos,
       featured: featuredEntry ? mk(featuredEntry, 'full') : null,
       featuredEntry,
     };

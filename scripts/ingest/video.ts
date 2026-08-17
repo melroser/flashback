@@ -93,15 +93,34 @@ export async function processVideo(
     // night footage tolerates it. Overshooting and failing would be worse than a
     // soft-looking frame.
     const totalBudgetBps = duration > 0 ? (MAX_VIDEO_BYTES * 8 * 0.92) / duration : 2_500_000;
+
+    /**
+     * Second ceiling, taken from the source's own bitrate.
+     *
+     * The duration budget above is the right guard for a long clip and badly wrong
+     * for a short one. A 7.6s 292KB clip gets budgeted ~18Mbps against the size cap
+     * and comes back as a ~16MB blob: six hundred times its source weight, for
+     * 320x240 footage. Re-encoding above the source rate cannot add detail that was
+     * never captured, so it buys nothing and costs storage, bandwidth, and an
+     * attendee pulling megabytes to watch seconds.
+     *
+     * Capping at the source rate plus a little headroom keeps the re-encode
+     * effectively transparent while leaving the shrink loop below intact for
+     * anything that still overshoots the hard ceiling.
+     */
+    const sourceBytes = (await fs.stat(src)).size;
+    const sourceBps = duration > 0 ? (sourceBytes * 8) / duration : totalBudgetBps;
+    const budgetBps = Math.min(totalBudgetBps, Math.floor(sourceBps * 1.1));
+
     const audioBitrate = opts.mute
       ? 0
-      : totalBudgetBps > 600_000
+      : budgetBps > 600_000
         ? 128_000
-        : totalBudgetBps > 300_000
+        : budgetBps > 300_000
           ? 96_000
           : 64_000;
 
-    let videoBitrate = Math.max(80_000, Math.floor(totalBudgetBps - audioBitrate));
+    let videoBitrate = Math.max(80_000, Math.floor(budgetBps - audioBitrate));
 
     let encoded: Buffer | null = null;
 

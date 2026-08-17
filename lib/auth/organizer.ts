@@ -38,6 +38,25 @@ export function withOrganizer(
     );
 
     if (!org) {
+      /**
+       * A browser navigation must never be answered with a raw JSON body.
+       *
+       * The admin controls are plain `method="post"` forms, so the response IS the
+       * page. An organizer whose 12-hour session lapsed clicked a button and got
+       * `{"error":"FORBIDDEN"}` rendered as the entire document, with no link back
+       * and no explanation. The privilege decision was right; the presentation was
+       * a dead end.
+       *
+       * Send anything that asked for HTML to the sign-in form, and keep the JSON
+       * bodies for API clients and the deployment checks that assert on them.
+       */
+      if ((req.headers.get('accept') ?? '').includes('text/html')) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: '/admin?expired=1', 'cache-control': 'private, no-store' },
+        });
+      }
+
       const att = await verifyToken(
         sessionKey(),
         readCookie(cookies, ATTENDEE_COOKIE),
@@ -48,12 +67,23 @@ export function withOrganizer(
       return json({ error: 'UNAUTHORIZED' }, 401);
     }
 
-    // CSRF: reject a mismatched Origin, and reject an absent one on a
-    // state-changing request.
+    // CSRF.
+    //
+    // The primary guard is SameSite=Strict on fb_o: a cross-site POST cannot carry
+    // the cookie at all, so it fails as unauthenticated before reaching here. The
+    // Origin comparison is defence in depth.
+    //
+    // An ABSENT Origin is therefore allowed. Safari and some Chromium-based
+    // browsers omit Origin on same-origin form submissions, and rejecting that
+    // broke every button on the admin page in those browsers. A PRESENT Origin
+    // must still match exactly, so a genuine cross-site attempt is still refused.
     const expected = siteOrigin();
     const origin = req.headers.get('origin');
-    if (expected) {
-      if (!origin || origin !== expected) return json({ error: 'FORBIDDEN' }, 403);
+    if (expected && origin) {
+      const normalise = (u: string) => u.replace(/\/$/, '').toLowerCase();
+      if (normalise(origin) !== normalise(expected)) {
+        return json({ error: 'FORBIDDEN' }, 403);
+      }
     }
 
     // Guard against the secret being unset in production.

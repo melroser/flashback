@@ -25,18 +25,22 @@ export async function GET(req: Request) {
   const gate = await gateGrid(req);
   if (!gate.ok) return denialResponse(gate);
 
-  const dataUris = await readGridDataUris(gate.photos);
+  // Photographs inline their `grid` thumbnail; clips inline their `poster` frame,
+  // which is only a couple of KB. Both ride this one response.
+  const dataUris = await readGridDataUris([...gate.photos, ...gate.videos]);
 
-  const items = gate.photos.flatMap((p) => {
+  const items = [...gate.photos, ...gate.videos].flatMap((p) => {
     const dataUri = dataUris.get(p.mediaId);
-    const meta = p.entry.variants.grid;
+    const meta = p.entry.variants[p.variant];
     if (!dataUri || !meta) return [];
     return [
       {
         mediaId: p.mediaId,
         label: p.entry.label,
+        type: p.entry.type,
         width: meta.width,
         height: meta.height,
+        durationMs: p.entry.durationMs,
         dataUri,
       },
     ];

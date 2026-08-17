@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StrippedExif } from './StrippedExif';
 
 export interface OverlayItem {
   mediaId: string;
@@ -140,18 +139,6 @@ function Lightbox({ item, onClose }: { item: OverlayItem; onClose: () => void })
           onContextMenu={block}
           className="no-save max-h-full max-w-full object-contain"
         />
-      </div>
-
-      {/* Where a film site would show off the EXIF. Ours shows its absence. */}
-      <div className="mx-auto w-full max-w-md shrink-0 pb-1 pt-2">
-        <details>
-          <summary className="cursor-pointer list-none text-label uppercase tracking-[0.28em] text-smoke hover:text-bone">
-            Camera data — removed
-          </summary>
-          <div className="mt-2">
-            <StrippedExif mediaId={item.mediaId} />
-          </div>
-        </details>
       </div>
     </div>
   );

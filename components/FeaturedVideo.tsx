@@ -27,7 +27,8 @@ export function FeaturedVideo({
   }, []);
 
   return (
-    <video
+    <div className="relative aspect-[4/3] max-h-[70vh] w-full sm:aspect-[16/9]">
+      <video
       ref={ref}
       src={src}
       poster={poster}
@@ -38,7 +39,12 @@ export function FeaturedVideo({
       controlsList="nodownload noplaybackrate"
       disablePictureInPicture
       aria-label={`Video ${label} from the night`}
-      className="mx-auto block max-h-[38vh] w-auto max-w-full"
-    />
+      // The source is 320x240 SD Handycam footage. Letterboxing it into a small
+      // centred box in a wide black band looked broken, so it fills the width and
+      // is cropped to a band with object-cover. Upscaling soft, abstract night
+      // footage reads as intentional here rather than as a defect.
+      className="block h-full w-full object-cover" 
+      />
+    </div>
   );
 }
