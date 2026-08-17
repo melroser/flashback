@@ -50,6 +50,24 @@ npm test
 ./scripts/check-invariants.sh
 ```
 
+### Re-ingesting a new edit
+
+Re-ingest writes a fresh index with new opaque ids, so the previous edit's bytes stay
+in the store, unreachable but still counted against storage. Netlify Blobs has no
+TTL, so nothing reclaims them automatically. Zero-downtime sequence:
+
+```bash
+npm run snapshot-ids                     # record the current ids
+npm run ingest -- <newdir> --dry-run     # validate stripping and sizes
+npm run ingest -- <newdir> --featured <clip.mov>
+npm run sweep-orphans                    # delete only ids no longer in the index
+```
+
+Ingest deliberately **preserves** the existing attendee code, expiration and
+LIVE/DISABLED state — a new edit does not silently reset access you already
+distributed. Reference labels are reassigned from `QLK 001`, so don't re-ingest after
+sending the code if anyone might be quoting a label.
+
 `ingest` runs on the photographer's machine and writes straight to production Blobs.
 It never runs on Netlify. Source files are opened read-only and never modified —
 **your originals are never touched, and expiry never deletes them.** Archive

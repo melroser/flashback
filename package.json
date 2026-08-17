@@ -10,7 +10,9 @@
     "lint": "next lint",
     "test": "vitest --run",
     "ingest": "tsx scripts/ingest/index.ts",
-    "verify": "tsx scripts/verify-deployed.ts"
+    "verify": "tsx scripts/verify-deployed.ts",
+    "snapshot-ids": "tsx scripts/snapshot-ids.ts",
+    "sweep-orphans": "tsx scripts/sweep-orphans.ts"
   },
   "dependencies": {
     "@netlify/blobs": "8.2.0",
