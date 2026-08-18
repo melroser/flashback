@@ -60,9 +60,21 @@ export default async function AdminView() {
   const pendingTotal = removals.filter((r) => r.status === 'PENDING').length;
 
   const live = config.state === 'LIVE';
-  const expired = Date.now() >= Date.parse(config.expiresAt);
+  const expiresMs = Date.parse(config.expiresAt);
+  const expired = Date.now() >= expiresMs;
   const codeRecord = await readCodeRecord();
   const origin = siteOrigin() ?? '';
+
+  // Her timezone, not GMT. A promoter should not have to convert UTC.
+  const expiresLocal = new Date(expiresMs).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  const daysLeft = Math.max(0, Math.ceil((expiresMs - Date.now()) / 86_400_000));
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -97,8 +109,10 @@ export default async function AdminView() {
       </section>
 
       <p className="mt-2 text-body text-smoke">
-        Expires {new Date(config.expiresAt).toUTCString()}
-        {hiddenCount > 0 ? ` — ${hiddenCount} item(s) currently hidden` : ''}
+        {expired
+          ? `Ended ${expiresLocal}. Nothing was deleted.`
+          : `Shuts off on its own in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — ${expiresLocal}.`}
+        {hiddenCount > 0 ? ` ${hiddenCount} item(s) hidden right now.` : ''}
       </p>
 
       {/* THE control that matters most. */}
@@ -125,76 +139,98 @@ export default async function AdminView() {
               Enable archive
             </button>
           </form>
-          <form method="post" action="/api/admin/session/logout">
-            <button type="submit" className={`${BTN} border-ash text-smoke`}>
-              Log out
-            </button>
-          </form>
         </div>
         <p className="mt-3 text-body text-smoke">
-          Disable takes effect immediately. Attendees can&apos;t sign in and existing
-          sessions stop loading media.
+          Disable takes effect immediately. Nobody can sign in and anyone already looking
+          stops loading photos. Nothing is deleted — Enable puts it all back.
         </p>
+      </section>
+
+      {/* Send to attendees. This block must never instruct a rotation: doing that
+          mid-event signs out everyone who already has the code. */}
+      <section className="mt-4 border border-ash bg-tar p-4">
+        <p className={L}>Send to attendees</p>
+        {codeRecord ? (
+          <>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-ash bg-void p-3 text-body text-bone">
+{`FLASHBACK
+${config.eventName}
+Private archive:
+${origin}
+Access code:`}
+              <span className="text-smoke">{'  (the code you already have)'}</span>
+            </pre>
+            <p className="mt-2 text-body text-smoke">
+              Flashback stores the code scrambled, so it can&apos;t show it to you again —
+              use the one you were given. Everything above is safe to paste anywhere.
+            </p>
+          </>
+        ) : (
+          <p className="mt-3 text-body text-siren">
+            No code exists yet, so nobody can get in. Create one below first.
+          </p>
+        )}
       </section>
 
       {/* Expiration + code */}
       <section className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="border border-ash bg-tar p-4">
-          <p className={L}>Change expiration</p>
+          <p className={L}>Change the shut-off date</p>
           <form method="post" action="/api/admin/expiration" className="mt-3 flex gap-2">
             <input
               type="datetime-local"
               name="expiresAt"
               required
               className={FIELD}
-              defaultValue={new Date(config.expiresAt).toISOString().slice(0, 16)}
+              defaultValue={new Date(expiresMs).toISOString().slice(0, 16)}
             />
             <button type="submit" className={`${BTN} border-ash text-bone hover:border-uv`}>
               Set
             </button>
           </form>
           <p className="mt-2 text-body text-smoke">
-            A past date ends the archive immediately without deleting anything.
+            Pick a date in the past to end it right now. Nothing gets deleted either way.
           </p>
         </div>
 
         <div className="border border-ash bg-tar p-4">
-          <p className={L}>Attendee code</p>
-          <p className="mt-2 text-body text-smoke">
-            {codeRecord
-              ? `A code is set (v${codeRecord.codeVersion}, ${codeRecord.codeLength} characters).`
-              : 'No code is set.'}{' '}
-            The code is stored hashed and never in plaintext, so it can only be shown at the
-            moment it is created.
-          </p>
+          <p className={L}>{codeRecord ? 'Replace the access code' : 'Create the access code'}</p>
+          {codeRecord ? (
+            <p className="mt-2 text-body text-smoke">
+              A code is set and working. You only need this if the code got passed around
+              to people who weren&apos;t there.{' '}
+              <strong className="text-siren">
+                Replacing it locks out everyone currently using the old code
+              </strong>{' '}
+              — you&apos;d have to send the new one to everybody again.
+            </p>
+          ) : (
+            <p className="mt-2 text-body text-smoke">
+              This creates the code attendees type in. It&apos;s shown once, right after you
+              tap it — copy it somewhere before leaving the page.
+            </p>
+          )}
           <form method="post" action="/api/admin/code/rotate" className="mt-3">
-            <button type="submit" className={`${BTN} border-uv text-bone hover:bg-uv`}>
-              Rotate &amp; reveal new code
+            <button
+              type="submit"
+              className={`${BTN} ${
+                codeRecord ? 'border-siren text-siren hover:bg-siren hover:text-void' : 'border-uv text-bone hover:bg-uv'
+              }`}
+            >
+              {codeRecord ? 'Replace code & lock everyone out' : 'Create code'}
             </button>
           </form>
-          <p className="mt-2 text-body text-smoke">
-            Rotating signs every attendee out.
-          </p>
         </div>
-      </section>
-
-      {/* Distribution text */}
-      <section className="mt-4 border border-ash bg-tar p-4">
-        <p className={L}>Send to attendees</p>
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-ash bg-void p-3 text-body text-bone">
-{`FLASHBACK
-${config.eventName}
-Private archive:
-${origin}
-Access code:
-${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to create one>'}`}
-        </pre>
       </section>
 
       {/* Pending removals */}
       {pendingTotal > 0 ? (
         <section className="mt-4 border border-siren bg-tar p-4">
-          <p className={L}>Pending removal requests ({pendingTotal})</p>
+          <p className={L}>People asking to be taken out ({pendingTotal})</p>
+          <p className="mt-2 text-body text-smoke">
+            These are already hidden from everyone. Nothing is waiting on you — this is just
+            so you know.
+          </p>
           <ul className="mt-3 space-y-2">
             {removals
               .filter((r) => r.status === 'PENDING')
@@ -205,7 +241,12 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                     <p className="font-mono text-body text-flash">
                       {entry?.label ?? 'unknown'}{' '}
                       <span className="text-smoke">
-                        {new Date(r.submittedAt).toUTCString()}
+                        {new Date(r.submittedAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
                       </span>
                     </p>
                     {r.note ? <p className="mt-1 text-body text-bone">{r.note}</p> : null}
@@ -215,7 +256,7 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                           <input type="hidden" name="recordId" value={r.recordId} />
                           <input type="hidden" name="status" value={s} />
                           <button type="submit" className={`${BTN} border-ash text-smoke hover:text-bone`}>
-                            {s === 'REVIEWED' ? 'Mark reviewed' : 'Dismiss'}
+                            {s === 'REVIEWED' ? 'Mark handled' : 'Dismiss'}
                           </button>
                         </form>
                       ))}
@@ -230,14 +271,14 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                 <input type="hidden" name="all" value="true" />
                 <input type="hidden" name="status" value={s} />
                 <button type="submit" className={`${BTN} border-ash text-smoke hover:text-bone`}>
-                  {s === 'REVIEWED' ? 'Mark all reviewed' : 'Dismiss all'}
+                  {s === 'REVIEWED' ? 'Mark all handled' : 'Dismiss all'}
                 </button>
               </form>
             ))}
           </div>
           <p className="mt-2 text-body text-smoke">
-            Reviewing never un-hides anything. Restoring is always a separate, deliberate
-            action.
+            Marking these never puts a photo back up. Putting one back is always a separate,
+            deliberate choice.
           </p>
         </section>
       ) : null}
@@ -246,18 +287,19 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
       {hiddenCount > 0 ? (
         <section className="mt-4 border border-ash bg-tar p-4">
           <p className={L}>
-            Restore hidden items ({restorableCount} of {hiddenCount})
+            Put hidden photos back ({restorableCount} of {hiddenCount})
           </p>
           <p className="mt-2 text-body text-smoke">
-            Anyone with the code can hide items, so this exists to undo a mass hide. It
-            restores every hidden item <strong className="text-bone">except</strong> the
-            ones somebody asked to have taken down — those stay hidden.
+            Anyone with the code can hide photos, so this is here in case someone hides a
+            lot of them at once. It puts back everything{' '}
+            <strong className="text-bone">except</strong> photos someone asked to be taken
+            out of — those stay hidden.
           </p>
           {heldBackCount > 0 ? (
             <p className="mt-2 text-body text-smoke">
-              {heldBackCount} hidden item{heldBackCount > 1 ? 's have' : ' has'} a pending
-              request and will stay hidden. If you decide to put one back, use its own
-              Restore button below.
+              {heldBackCount} photo{heldBackCount > 1 ? 's' : ''} stay{heldBackCount > 1 ? '' : 's'}{' '}
+              hidden because someone asked. If you decide to put one back anyway, use its own
+              button further down.
             </p>
           ) : null}
           {restorableCount > 0 ? (
@@ -277,12 +319,13 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                 type="submit"
                 className={`${BTN} border-acid text-acid hover:bg-acid hover:text-void`}
               >
-                Restore all
+                Put them back
               </button>
             </form>
           ) : (
             <p className="mt-3 text-body text-smoke">
-              Every hidden item has a pending request, so there is nothing to restore here.
+              Every hidden photo was hidden by request, so there&apos;s nothing to put back
+              here.
             </p>
           )}
         </section>
@@ -290,7 +333,7 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
 
       {/* Media */}
       <section className="mt-4">
-        <p className={L}>Media ({entries.length})</p>
+        <p className={L}>Everything in the gallery ({entries.length})</p>
         <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {entries.map((e) => {
             const v = vis.get(e.mediaId);
@@ -326,10 +369,14 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                   <span className={L}>{e.type === 'video' ? 'video' : ''}</span>
                 </p>
 
-                {v?.hidden ? <p className="text-label uppercase tracking-[0.28em] text-siren">Hidden</p> : null}
+                {v?.hidden ? (
+                  <p className="text-label uppercase tracking-[0.28em] text-siren">
+                    Hidden
+                  </p>
+                ) : null}
                 {pending > 0 ? (
                   <p className="text-label uppercase tracking-[0.28em] text-siren">
-                    {pending} pending request{pending > 1 ? 's' : ''}
+                    Someone asked to be taken out
                   </p>
                 ) : null}
 
@@ -343,7 +390,11 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                       type="submit"
                       className={`${BTN} w-full border-ash text-smoke hover:text-bone`}
                     >
-                      {v?.hidden ? (pending > 0 ? 'Restore (override request)' : 'Restore') : 'Hide'}
+                      {v?.hidden
+                        ? pending > 0
+                          ? 'Put back anyway'
+                          : 'Put back'
+                        : 'Hide'}
                     </button>
                   </form>
 
@@ -365,7 +416,7 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
                         type="submit"
                         className={`${BTN} w-full border-siren text-siren hover:bg-siren hover:text-void`}
                       >
-                        Delete permanently
+                        Delete for good
                       </button>
                     </form>
                   </details>
@@ -380,8 +431,10 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
       <section className="mt-6 border border-siren bg-tar p-4">
         <p className={L}>Danger</p>
         <p className="mt-2 text-body text-smoke">
-          Permanently removes every file from storage. Your originals on your own machine are
-          untouched. This cannot be undone.
+          Wipes every photo and video out of storage for good. The photographer&apos;s own
+          copies are untouched. This can&apos;t be undone. If you just want it to go away,
+          use <strong className="text-bone">Disable archive</strong> at the top instead —
+          that&apos;s reversible.
         </p>
         <form method="post" action="/api/admin/media/delete-all" className="mt-3 flex gap-2">
           <input
@@ -399,6 +452,16 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
           </button>
         </form>
       </section>
+
+      {/* Log out, deliberately last and far from Disable archive. */}
+      <section className="mt-6 border-t border-ash pt-4">
+        <form method="post" action="/api/admin/session/logout">
+          <button type="submit" className={`${BTN} border-ash text-smoke`}>
+            Log out
+          </button>
+        </form>
+      </section>
     </main>
   );
 }
+
