@@ -1,9 +1,31 @@
 // The media store must be unreachable from anywhere except the two modules that
 // are allowed to touch bytes. This makes the invariant fail the build instead of
 // relying on a reviewer noticing.
+import tsParser from '@typescript-eslint/parser';
+
 export default [
   {
+    // Flat config has no .eslintignore; ignores live here. Build output and
+    // vendored dependencies are not ours to lint, and scripts/tmp/ is scratch.
+    ignores: [
+      '.next/**',
+      '.netlify/**',
+      'node_modules/**',
+      'scripts/tmp/**',
+      'ingest-staging/**',
+      'test-results/**',
+    ],
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
+    // The default parser (espree) cannot read TypeScript syntax, so without this
+    // every .ts file is a parse error and no rule below ever gets to run.
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
     rules: {
       'no-restricted-imports': [
         'error',

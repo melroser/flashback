@@ -77,8 +77,17 @@ export function withOrganizer(
     // browsers omit Origin on same-origin form submissions, and rejecting that
     // broke every button on the admin page in those browsers. A PRESENT Origin
     // must still match exactly, so a genuine cross-site attempt is still refused.
+    //
+    // The literal string `null` counts as absent, not as a mismatch. We serve
+    // `Referrer-Policy: no-referrer` per Requirement 12.3, and under that policy
+    // Chrome sends `Origin: null` on a same-origin form navigation. Comparing that
+    // against the site origin failed, so EVERY admin button returned FORBIDDEN in
+    // Chrome — the same class of bug the paragraph above describes, reintroduced
+    // through a different header. An opaque origin cannot be trusted as a match, so
+    // it is treated as no evidence either way and SameSite carries the decision.
     const expected = siteOrigin();
-    const origin = req.headers.get('origin');
+    const rawOrigin = req.headers.get('origin');
+    const origin = rawOrigin && rawOrigin !== 'null' ? rawOrigin : null;
     if (expected && origin) {
       const normalise = (u: string) => u.replace(/\/$/, '').toLowerCase();
       if (normalise(origin) !== normalise(expected)) {

@@ -188,23 +188,25 @@ function RemovalDialog({
       className="fixed inset-0 z-[85] flex items-center justify-center bg-void/95 p-4"
     >
       <div className="w-full max-w-md border border-ash bg-tar p-5">
+        {/* No reference label in the heading: `QLK 062` is an internal identifier
+            and means nothing to the person in the photograph. */}
         <h2 id="removal-heading" className="font-display text-h2 uppercase text-flash">
-          Take {item.label} down
+          Take image down
         </h2>
         <p className="mt-3 text-body text-smoke">
           You don&apos;t have to explain, and you don&apos;t have to say who you are. Ask and
           it&apos;s hidden right away.
         </p>
         <label htmlFor="note" className="mt-5 block text-label uppercase tracking-[0.28em] text-smoke">
-          Anything that helps (optional)
+          Anything you want to add
         </label>
         <textarea
           id="note"
           value={note}
           onChange={(e) => setNote(e.target.value.slice(0, 1000))}
           rows={3}
-          className="mt-2 w-full border border-ash bg-void p-2 text-body text-bone focus:border-uv"
-          placeholder="e.g. left side of the frame"
+          className="mt-2 w-full border border-ash bg-void p-2 text-body text-bone placeholder:text-smoke/50 focus:border-uv"
+          placeholder="Optional"
         />
         <p className="mt-1 text-label uppercase tracking-[0.28em] text-smoke">{note.length}/1000</p>
         {error ? <p className="mt-3 text-body text-siren">{error}</p> : null}

@@ -60,7 +60,12 @@ test.describe('attendee archive', () => {
 
     // Target the LAST tile so a failure cannot bury QLK 001.
     const tiles = page.getByRole('button', { name: /request removal/i });
+    // Wait for the manifest to land first. Counting straight after sign-in raced the
+    // client fetch and returned 0, so the assertion below compared against -1 and
+    // the test failed AFTER hiding a real item but BEFORE its restore step.
+    await expect(tiles.first()).toBeVisible();
     const n = await tiles.count();
+    expect(n).toBeGreaterThan(0);
     await tiles.nth(n - 1).click();
 
     const dialog = page.getByRole('dialog');

@@ -33,6 +33,18 @@ export async function POST(req: Request) {
 
   if (!ok) {
     await recordHit('admin-login', rate.hash);
+
+    // A mistyped key came from a browser form, so the response IS the page. Sending
+    // JSON put `{"error":"UNAUTHORIZED"}` on screen as the entire document with no
+    // field to try again in. Return to the sign-in form and let it say so. API
+    // clients, including the deployment verifier, still get the 401 body.
+    if ((req.headers.get('accept') ?? '').includes('text/html')) {
+      return new Response(null, {
+        status: 303,
+        headers: { location: '/admin?denied=1', 'cache-control': 'private, no-store' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'UNAUTHORIZED' }), {
       status: 401,
       headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },

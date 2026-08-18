@@ -91,13 +91,18 @@ function organizerLogin(
   csp: string,
   event: string,
   origin: string,
+  reason?: 'denied' | 'expired',
 ): NextResponse {
   // An attendee session here usually means they sensibly previewed the guest view
   // first. Say what to do next instead of scolding.
   const note =
-    status === 403
-      ? '<p class="err">You&rsquo;re signed in as an attendee. Paste the organizer key to manage the gallery.</p>'
-      : '';
+    reason === 'denied'
+      ? '<p class="err">That key didn&rsquo;t work. Check for a stray space and paste it again.</p>'
+      : reason === 'expired'
+        ? '<p class="err">Your session timed out. Paste the organizer key to pick up where you left off.</p>'
+        : status === 403
+          ? '<p class="err">You&rsquo;re signed in as an attendee. Paste the organizer key to manage the gallery.</p>'
+          : '';
 
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -180,7 +185,12 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (pathname === '/admin') {
-    if (!key) return organizerLogin(200, csp, event, origin);
+    // Set by the sign-in and privilege guards when they bounce a browser back here,
+    // so the form can explain itself instead of the user re-typing into silence.
+    const sp = req.nextUrl.searchParams;
+    const reason = sp.has('denied') ? 'denied' : sp.has('expired') ? 'expired' : undefined;
+
+    if (!key) return organizerLogin(200, csp, event, origin, reason);
     const org = await verifyToken(key, req.cookies.get(ORGANIZER_COOKIE)?.value, 'organizer');
     if (!org) {
       const att = await verifyToken(key, req.cookies.get(ATTENDEE_COOKIE)?.value, 'attendee');
@@ -194,7 +204,7 @@ export async function middleware(req: NextRequest) {
       // of what this has to convey. The security boundary is /api/admin/*, which
       // still returns 401 and 403, and the page itself re-verifies before
       // rendering anything.
-      return organizerLogin(att ? 403 : 200, csp, event, origin);
+      return organizerLogin(att ? 403 : 200, csp, event, origin, reason);
     }
   }
 

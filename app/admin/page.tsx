@@ -45,9 +45,18 @@ export default async function AdminView() {
 
   const photos = entries.filter((e) => e.type === 'photo' && !vis.get(e.mediaId)?.deleted);
   const videos = entries.filter((e) => e.type === 'video' && !vis.get(e.mediaId)?.deleted);
-  const hiddenCount = entries.filter(
+
+  const hiddenEntries = entries.filter(
     (e) => vis.get(e.mediaId)?.hidden && !vis.get(e.mediaId)?.deleted,
+  );
+  const hiddenCount = hiddenEntries.length;
+  // The default restore path holds back anything with a pending removal request, so
+  // the confirmation string has to match THAT count, not the total hidden count.
+  const restorableCount = hiddenEntries.filter(
+    (e) => (pendingByMedia.get(e.mediaId) ?? 0) === 0,
   ).length;
+  const heldBackCount = hiddenCount - restorableCount;
+
   const pendingTotal = removals.filter((r) => r.status === 'PENDING').length;
 
   const live = config.state === 'LIVE';
@@ -236,23 +245,46 @@ ${codeRecord ? '<rotate to reveal a fresh code>' : '<no code set — rotate to c
       {/* Bulk recovery */}
       {hiddenCount > 0 ? (
         <section className="mt-4 border border-ash bg-tar p-4">
-          <p className={L}>Restore everything hidden ({hiddenCount})</p>
+          <p className={L}>
+            Restore hidden items ({restorableCount} of {hiddenCount})
+          </p>
           <p className="mt-2 text-body text-smoke">
             Anyone with the code can hide items, so this exists to undo a mass hide. It
-            makes every hidden item visible again, including any with a pending request.
+            restores every hidden item <strong className="text-bone">except</strong> the
+            ones somebody asked to have taken down — those stay hidden.
           </p>
-          <form method="post" action="/api/admin/media/restore-all" className="mt-3 flex gap-2">
-            <input
-              type="text"
-              name="confirm"
-              required
-              placeholder={`RESTORE ${hiddenCount} ITEMS`}
-              className={FIELD}
-            />
-            <button type="submit" className={`${BTN} border-acid text-acid hover:bg-acid hover:text-void`}>
-              Restore all
-            </button>
-          </form>
+          {heldBackCount > 0 ? (
+            <p className="mt-2 text-body text-smoke">
+              {heldBackCount} hidden item{heldBackCount > 1 ? 's have' : ' has'} a pending
+              request and will stay hidden. If you decide to put one back, use its own
+              Restore button below.
+            </p>
+          ) : null}
+          {restorableCount > 0 ? (
+            <form
+              method="post"
+              action="/api/admin/media/restore-all"
+              className="mt-3 flex gap-2"
+            >
+              <input
+                type="text"
+                name="confirm"
+                required
+                placeholder={`RESTORE ${restorableCount} ITEMS`}
+                className={FIELD}
+              />
+              <button
+                type="submit"
+                className={`${BTN} border-acid text-acid hover:bg-acid hover:text-void`}
+              >
+                Restore all
+              </button>
+            </form>
+          ) : (
+            <p className="mt-3 text-body text-smoke">
+              Every hidden item has a pending request, so there is nothing to restore here.
+            </p>
+          )}
         </section>
       ) : null}
 
